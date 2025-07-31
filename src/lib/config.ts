@@ -432,18 +432,18 @@ export async function resetConfig() {
   }
   const adminConfig = {
     SiteConfig: {
-      SiteName: process.env.SITE_NAME || 'MoonTV',
+      SiteName: process.env.SITE_NAME || 'MagiesTV',
       Announcement:
         process.env.ANNOUNCEMENT ||
         '本网站仅提供影视信息搜索服务，所有内容均来自第三方网站。本站不存储任何视频资源，不对任何内容的准确性、合法性、完整性负责。',
       SearchDownstreamMaxPage:
-        Number(process.env.NEXT_PUBLIC_SEARCH_MAX_PAGE) || 5,
+        Number(process.env.NEXT_PUBLIC_SEARCH_MAX_PAGE) || 10,
       SiteInterfaceCacheTime: fileConfig.cache_time || 7200,
       ImageProxy: process.env.NEXT_PUBLIC_IMAGE_PROXY || '',
       DoubanProxy: process.env.NEXT_PUBLIC_DOUBAN_PROXY || '',
     },
     UserConfig: {
-      AllowRegister: process.env.NEXT_PUBLIC_ENABLE_REGISTER === 'true',
+      AllowRegister: process.env.NEXT_PUBLIC_ENABLE_REGISTER === 'false',
       Users: allUsers as any,
     },
     SourceConfig: apiSiteEntries.map(([key, site]) => ({
