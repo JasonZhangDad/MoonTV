@@ -56,7 +56,7 @@ export function getImageProxyCandidates(originalUrl: string): string[] {
   candidates.add(`${IMAGE_PROXY_FALLBACK}${encodeURIComponent(sourceUrl)}`);
   candidates.add(sourceUrl);
 
-  return [...candidates];
+  return Array.from(candidates);
 }
 
 function normalizeProxyPrefix(proxyUrl: string): string {
