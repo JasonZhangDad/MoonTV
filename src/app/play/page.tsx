@@ -461,6 +461,57 @@ function PlayPageClient() {
     return filteredLines.join('\n');
   }
 
+  function getOriginalUrlFromProxy(url: string): string {
+    try {
+      const parsed = new URL(url);
+      return parsed.searchParams.get('url') || url;
+    } catch {
+      return url;
+    }
+  }
+
+  function rewriteM3U8Urls(m3u8Content: string, playlistUrl: string): string {
+    if (!m3u8Content || !playlistUrl) return m3u8Content;
+
+    const originalPlaylistUrl = getOriginalUrlFromProxy(playlistUrl);
+
+    return m3u8Content
+      .split('\n')
+      .map((line) => rewriteM3U8Line(line, originalPlaylistUrl))
+      .join('\n');
+  }
+
+  function rewriteM3U8Line(line: string, playlistUrl: string): string {
+    try {
+      const trimmed = line.trim();
+      if (!trimmed) return line;
+
+      const uriAttrMatch = line.match(/URI="([^"]+)"/);
+      if (uriAttrMatch) {
+        const absoluteUri = new URL(uriAttrMatch[1], playlistUrl).toString();
+        return line.replace(uriAttrMatch[1], proxyHttpUrl(absoluteUri));
+      }
+
+      if (trimmed.startsWith('#')) return line;
+
+      const absoluteUrl = new URL(trimmed, playlistUrl).toString();
+      return line.replace(trimmed, proxyHttpUrl(absoluteUrl));
+    } catch {
+      return line;
+    }
+  }
+
+  function proxyHttpUrl(url: string): string {
+    try {
+      const parsed = new URL(url);
+      return ['http:', 'https:'].includes(parsed.protocol)
+        ? processVideoUrl(url)
+        : url;
+    } catch {
+      return url;
+    }
+  }
+
   // 跳过片头片尾配置相关函数
   const handleSkipConfigChange = async (newConfig: {
     enable: boolean;
@@ -581,8 +632,11 @@ function PlayPageClient() {
           ) {
             // 如果是m3u8文件，处理内容以移除广告分段
             if (response.data && typeof response.data === 'string') {
-              // 过滤掉广告段 - 实现更精确的广告过滤逻辑
-              response.data = filterAdsFromM3U8(response.data);
+              response.data = rewriteM3U8Urls(response.data, context.url);
+              if (blockAdEnabledRef.current) {
+                // 过滤掉广告段 - 实现更精确的广告过滤逻辑
+                response.data = filterAdsFromM3U8(response.data);
+              }
             }
             return onSuccess(response, stats, context, null);
           };
@@ -1287,9 +1341,7 @@ function PlayPageClient() {
               maxBufferSize: 60 * 1000 * 1000, // 约 60MB，超出后触发清理
 
               /* 自定义loader */
-              loader: blockAdEnabledRef.current
-                ? CustomHlsJsLoader
-                : Hls.DefaultConfig.loader,
+              loader: CustomHlsJsLoader,
             });
 
             hls.loadSource(url);

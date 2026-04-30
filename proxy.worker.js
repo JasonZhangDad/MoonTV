@@ -47,6 +47,7 @@ async function handleRequest(request) {
     // 发起对目标 URL 的请求
     const response = await fetch(modifiedRequest);
     let body = response.body;
+    let bodyModified = false;
     const contentType = response.headers.get('Content-Type') || '';
 
     // 处理重定向
@@ -56,6 +57,7 @@ async function handleRequest(request) {
       return handleRedirect(response, body, url.origin);
     } else if (isM3u8Response(actualUrlStr, contentType)) {
       body = rewriteM3u8Content(await response.text(), actualUrlStr, url.origin);
+      bodyModified = true;
     } else if (contentType.includes('text/html')) {
       body = await handleHtmlContent(
         response,
@@ -63,13 +65,20 @@ async function handleRequest(request) {
         url.host,
         actualUrlStr
       );
+      bodyModified = true;
+    }
+
+    const responseHeaders = new Headers(response.headers);
+    if (bodyModified) {
+      responseHeaders.delete('Content-Length');
+      responseHeaders.delete('Content-Encoding');
     }
 
     // 创建修改后的响应对象
     const modifiedResponse = new Response(body, {
       status: response.status,
       statusText: response.statusText,
-      headers: response.headers,
+      headers: responseHeaders,
     });
 
     // 添加禁用缓存的头部

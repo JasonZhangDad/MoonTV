@@ -86,7 +86,7 @@ export function processDoubanUrl(originalUrl: string): string {
 export function processVideoUrl(originalUrl: string): string {
   if (!originalUrl) return originalUrl;
   if (originalUrl.startsWith(DEFAULT_VIDEO_PROXY)) return originalUrl;
-  return `${DEFAULT_VIDEO_PROXY}${originalUrl}`;
+  return `${DEFAULT_VIDEO_PROXY}${encodeURIComponent(originalUrl)}`;
 }
 
 export function cleanHtmlTags(text: string): string {
