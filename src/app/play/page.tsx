@@ -506,7 +506,7 @@ function PlayPageClient() {
   function normalizeVideoTitle(title: string): string {
     return title
       .replace(/\s+/g, '')
-      .replace(/[《》「」『』【】\[\]（）()]/g, '')
+      .replace(/[\][《》「」『』【】（）()]/g, '')
       .toLowerCase();
   }
 
