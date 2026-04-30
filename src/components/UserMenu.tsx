@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { getAuthInfoFromBrowserCookie } from '@/lib/auth';
-import { checkForUpdates, CURRENT_VERSION, UpdateStatus } from '@/lib/version';
+import { checkForUpdates, UpdateStatus } from '@/lib/version';
 
 interface AuthInfo {
   username?: string;
@@ -40,7 +40,6 @@ export const UserMenu: React.FC = () => {
 
   // 版本检查相关状态
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
-  const [isChecking, setIsChecking] = useState(true);
 
   // 确保组件已挂载
   useEffect(() => {
@@ -117,8 +116,6 @@ export const UserMenu: React.FC = () => {
         setUpdateStatus(status);
       } catch (error) {
         console.warn('版本检查失败:', error);
-      } finally {
-        setIsChecking(false);
       }
     };
 
@@ -395,34 +392,6 @@ export const UserMenu: React.FC = () => {
           >
             <LogOut className='w-4 h-4' />
             <span className='font-medium'>登出</span>
-          </button>
-
-          {/* 分割线 */}
-          <div className='my-1 border-t border-gray-200 dark:border-gray-700'></div>
-
-          {/* 版本信息 */}
-          <button
-            onClick={() =>
-              window.open('https://github.com/senshinya/MoonTV', '_blank')
-            }
-            className='w-full px-3 py-2 text-center flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors text-xs'
-          >
-            <div className='flex items-center gap-1'>
-              <span className='font-mono'>v{CURRENT_VERSION}</span>
-              {!isChecking &&
-                updateStatus &&
-                updateStatus !== UpdateStatus.FETCH_FAILED && (
-                  <div
-                    className={`w-2 h-2 rounded-full -translate-y-2 ${
-                      updateStatus === UpdateStatus.HAS_UPDATE
-                        ? 'bg-yellow-500'
-                        : updateStatus === UpdateStatus.NO_UPDATE
-                        ? 'bg-green-400'
-                        : ''
-                    }`}
-                  ></div>
-                )}
-            </div>
           </button>
         </div>
       </div>

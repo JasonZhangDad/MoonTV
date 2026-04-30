@@ -22,7 +22,11 @@ import {
   subscribeToDataUpdates,
 } from '@/lib/db.client';
 import { SearchResult } from '@/lib/types';
-import { getVideoResolutionFromM3u8, processImageUrl } from '@/lib/utils';
+import {
+  getVideoResolutionFromM3u8,
+  processImageUrl,
+  processVideoUrl,
+} from '@/lib/utils';
 
 import EpisodeSelector from '@/components/EpisodeSelector';
 import PageLayout from '@/components/PageLayout';
@@ -410,7 +414,8 @@ function PlayPageClient() {
       setVideoUrl('');
       return;
     }
-    const newUrl = detailData?.episodes[episodeIndex] || '';
+    const playUrl = detailData?.episodes[episodeIndex] || '';
+    const newUrl = processVideoUrl(playUrl);
     if (newUrl !== videoUrl) {
       setVideoUrl(newUrl);
     }
@@ -1228,6 +1233,7 @@ function PlayPageClient() {
       artPlayerRef.current = new Artplayer({
         container: artRef.current,
         url: videoUrl,
+        type: 'm3u8',
         poster: videoCover,
         volume: 0.7,
         isLive: false,

@@ -2,6 +2,8 @@
 
 import Hls from 'hls.js';
 
+const DEFAULT_VIDEO_PROXY = 'https://play.magies.top/?url=';
+
 /**
  * 获取图片代理 URL 设置
  */
@@ -78,6 +80,15 @@ export function processDoubanUrl(originalUrl: string): string {
   return `${proxyUrl}${encodeURIComponent(originalUrl)}`;
 }
 
+/**
+ * 处理视频播放 URL，统一走播放代理
+ */
+export function processVideoUrl(originalUrl: string): string {
+  if (!originalUrl) return originalUrl;
+  if (originalUrl.startsWith(DEFAULT_VIDEO_PROXY)) return originalUrl;
+  return `${DEFAULT_VIDEO_PROXY}${originalUrl}`;
+}
+
 export function cleanHtmlTags(text: string): string {
   if (!text) return '';
   return text
@@ -100,6 +111,8 @@ export async function getVideoResolutionFromM3u8(m3u8Url: string): Promise<{
   pingTime: number; // 网络延迟（毫秒）
 }> {
   try {
+    const finalM3u8Url = processVideoUrl(m3u8Url);
+
     // 直接使用m3u8 URL作为视频源，避免CORS问题
     return new Promise((resolve, reject) => {
       const video = document.createElement('video');
@@ -111,7 +124,7 @@ export async function getVideoResolutionFromM3u8(m3u8Url: string): Promise<{
       let pingTime = 0;
 
       // 测量ping时间（使用m3u8 URL）
-      fetch(m3u8Url, { method: 'HEAD', mode: 'no-cors' })
+      fetch(finalM3u8Url, { method: 'HEAD', mode: 'no-cors' })
         .then(() => {
           pingTime = performance.now() - pingStart;
         })
@@ -217,7 +230,7 @@ export async function getVideoResolutionFromM3u8(m3u8Url: string): Promise<{
         }
       });
 
-      hls.loadSource(m3u8Url);
+      hls.loadSource(finalM3u8Url);
       hls.attachMedia(video);
 
       // 监听hls.js错误
