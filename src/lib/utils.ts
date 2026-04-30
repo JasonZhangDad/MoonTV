@@ -3,6 +3,7 @@
 import Hls from 'hls.js';
 
 const DEFAULT_VIDEO_PROXY = 'https://play.magies.top/?url=';
+const DEFAULT_IMAGE_PROXY = 'https://img.magies.top/?url=';
 
 /**
  * 获取图片代理 URL 设置
@@ -10,24 +11,18 @@ const DEFAULT_VIDEO_PROXY = 'https://play.magies.top/?url=';
 export function getImageProxyUrl(): string | null {
   if (typeof window === 'undefined') return null;
 
-  // 本地未开启图片代理，则不使用代理
-  const enableImageProxy = localStorage.getItem('enableImageProxy');
-  if (enableImageProxy !== null) {
-    if (!JSON.parse(enableImageProxy) as boolean) {
-      return null;
-    }
-  }
-
   const localImageProxy = localStorage.getItem('imageProxyUrl');
   if (localImageProxy != null) {
-    return localImageProxy.trim() ? localImageProxy.trim() : null;
+    return localImageProxy.trim()
+      ? normalizeProxyPrefix(localImageProxy.trim())
+      : DEFAULT_IMAGE_PROXY;
   }
 
   // 如果未设置，则使用全局对象
   const serverImageProxy = (window as any).RUNTIME_CONFIG?.IMAGE_PROXY;
   return serverImageProxy && serverImageProxy.trim()
-    ? serverImageProxy.trim()
-    : null;
+    ? normalizeProxyPrefix(serverImageProxy.trim())
+    : DEFAULT_IMAGE_PROXY;
 }
 
 /**
@@ -38,8 +33,17 @@ export function processImageUrl(originalUrl: string): string {
 
   const proxyUrl = getImageProxyUrl();
   if (!proxyUrl) return originalUrl;
+  if (originalUrl.startsWith(proxyUrl)) return originalUrl;
 
   return `${proxyUrl}${encodeURIComponent(originalUrl)}`;
+}
+
+function normalizeProxyPrefix(proxyUrl: string): string {
+  if (!proxyUrl) return proxyUrl;
+  if (proxyUrl.includes('?url=')) return proxyUrl;
+  if (proxyUrl.endsWith('?url=')) return proxyUrl;
+
+  return `${proxyUrl.replace(/[/?&]+$/, '')}/?url=`;
 }
 
 /**
