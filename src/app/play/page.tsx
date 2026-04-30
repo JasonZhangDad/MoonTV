@@ -313,7 +313,14 @@ function PlayPageClient() {
       );
     });
 
-    return resultsWithScore[0].source;
+    // 优先选择 1080P 及以上的源；若无已确认的高画质，则允许画质未知的源（可能是高清）；
+    // 仅在确定低于 1080P 时才降级使用
+    const LOW_QUALITY = new Set(['720p', '480p', 'SD']);
+    const highOrUnknown = resultsWithScore.filter(
+      (r) => !LOW_QUALITY.has(r.testResult.quality)
+    );
+    const candidates = highOrUnknown.length > 0 ? highOrUnknown : resultsWithScore;
+    return candidates[0].source;
   };
 
   // 计算播放源综合评分
@@ -329,28 +336,22 @@ function PlayPageClient() {
   ): number => {
     let score = 0;
 
-    // 分辨率评分 (40% 权重)
+    // 分辨率评分 (50% 权重)；低于 1080P 的源大幅降分
     const qualityScore = (() => {
       switch (testResult.quality) {
-        case '4K':
-          return 100;
-        case '2K':
-          return 85;
-        case '1080p':
-          return 75;
-        case '720p':
-          return 60;
-        case '480p':
-          return 40;
-        case 'SD':
-          return 20;
-        default:
-          return 0;
+        case '4K':   return 100;
+        case '2K':   return 90;
+        case '1080p': return 80;
+        case '未知':  return 50; // 无法确认，中性分
+        case '720p':  return 10; // 明确低于要求，严重降分
+        case '480p':  return 5;
+        case 'SD':    return 0;
+        default:      return 50;
       }
     })();
-    score += qualityScore * 0.4;
+    score += qualityScore * 0.5;
 
-    // 下载速度评分 (40% 权重) - 基于最大速度线性映射
+    // 下载速度评分 (30% 权重) - 基于最大速度线性映射
     const speedScore = (() => {
       const speedStr = testResult.loadSpeed;
       if (speedStr === '未知' || speedStr === '测量中...') return 30;
@@ -367,7 +368,7 @@ function PlayPageClient() {
       const speedRatio = speedKBps / maxSpeed;
       return Math.min(100, Math.max(0, speedRatio * 100));
     })();
-    score += speedScore * 0.4;
+    score += speedScore * 0.3;
 
     // 网络延迟评分 (20% 权重) - 基于延迟范围线性映射
     const pingScore = (() => {
@@ -1352,8 +1353,10 @@ function PlayPageClient() {
               backBufferLength: 30,
               maxBufferSize: 100 * 1000 * 1000, // 100MB
 
-              /* 质量选择 */
-              startLevel: -1, // 自动选择初始质量级别
+              /* 质量选择：偏向高画质 */
+              startLevel: -1,           // 自动选择初始质量级别
+              capLevelToPlayerSize: false, // 不因播放器尺寸限制画质
+              abrEwmaDefaultEstimate: 5 * 1024 * 1024, // 初始带宽估算 5Mbps，促使选高质量轨道
 
               /* 重试策略 */
               fragLoadingMaxRetry: 6,
