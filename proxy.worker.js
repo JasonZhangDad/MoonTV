@@ -45,18 +45,13 @@ async function handleRequest(request) {
       redirect: 'manual',
     });
 
-    // 发起对目标 URL 的请求
-    const response = await fetch(modifiedRequest);
+    // 发起对目标 URL 的请求，并在 Worker 内部跟随重定向，避免把浏览器带出代理链
+    const response = await fetchWithRedirects(modifiedRequest, actualUrlStr);
     let body = response.body;
     let bodyModified = false;
     const contentType = response.headers.get('Content-Type') || '';
 
-    // 处理重定向
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      body = response.body;
-      // 创建新的 Response 对象以修改 Location 头部
-      return handleRedirect(response, body, url.origin);
-    } else if (isM3u8Response(actualUrlStr, contentType)) {
+    if (isM3u8Response(actualUrlStr, contentType)) {
       body = rewriteM3u8Content(await response.text(), actualUrlStr, url.origin);
       bodyModified = true;
     } else if (contentType.includes('text/html')) {
@@ -140,18 +135,34 @@ function setUpstreamHeaders(headers, actualUrlStr) {
   }
 }
 
-// 处理重定向
-function handleRedirect(response, body, proxyOrigin) {
-  const location = new URL(response.headers.get('location'));
-  const modifiedLocation = proxyUrl(location.toString(), proxyOrigin);
-  return new Response(body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: {
-      ...response.headers,
-      Location: modifiedLocation,
-    },
-  });
+async function fetchWithRedirects(request, actualUrlStr, maxRedirects = 5) {
+  let currentRequest = request;
+  let currentUrl = actualUrlStr;
+
+  for (let i = 0; i < maxRedirects; i++) {
+    const response = await fetch(currentRequest);
+    if (![301, 302, 303, 307, 308].includes(response.status)) {
+      return response;
+    }
+
+    const location = response.headers.get('location');
+    if (!location) {
+      return response;
+    }
+
+    const nextUrl = new URL(location, currentUrl).toString();
+    const nextHeaders = new Headers(currentRequest.headers);
+    setUpstreamHeaders(nextHeaders, nextUrl);
+
+    currentUrl = nextUrl;
+    currentRequest = new Request(nextUrl, {
+      headers: nextHeaders,
+      method: 'GET',
+      redirect: 'manual',
+    });
+  }
+
+  return fetch(currentRequest);
 }
 
 // 处理 HTML 内容中的相对路径
