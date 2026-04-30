@@ -61,10 +61,10 @@ async function handleRequest(request, event) {
     let bodyModified = false;
     const contentType = response.headers.get('Content-Type') || '';
 
-    if (isM3u8Response(actualUrlStr, contentType)) {
+    if (response.ok && isM3u8Response(actualUrlStr, contentType)) {
       body = rewriteM3u8Content(await response.text(), actualUrlStr, PROXY_ORIGIN);
       bodyModified = true;
-    } else if (contentType.includes('text/html')) {
+    } else if (response.ok && contentType.includes('text/html')) {
       body = await handleHtmlContent(
         response,
         url.protocol,

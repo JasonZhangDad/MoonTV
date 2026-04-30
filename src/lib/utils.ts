@@ -3,6 +3,9 @@
 const DEFAULT_VIDEO_PROXY = 'https://play.magies.top/?url=';
 const DEFAULT_IMAGE_PROXY = 'https://img.magies.top/?url=';
 const IMAGE_PROXY_FALLBACK = '/api/image-proxy?url=';
+const VIDEO_PROXY_BYPASS_HOST_PATTERNS = [
+  /(^|\.)ffzy-play\d+\.com$/i,
+];
 
 /**
  * 获取图片代理 URL 设置
@@ -122,7 +125,19 @@ export function processDoubanUrl(originalUrl: string): string {
 export function processVideoUrl(originalUrl: string): string {
   if (!originalUrl) return originalUrl;
   if (originalUrl.startsWith(DEFAULT_VIDEO_PROXY)) return originalUrl;
+  if (shouldBypassVideoProxy(originalUrl)) return originalUrl;
   return `${DEFAULT_VIDEO_PROXY}${encodeURIComponent(originalUrl)}`;
+}
+
+function shouldBypassVideoProxy(originalUrl: string): boolean {
+  try {
+    const { hostname } = new URL(originalUrl);
+    return VIDEO_PROXY_BYPASS_HOST_PATTERNS.some((pattern) =>
+      pattern.test(hostname)
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function cleanHtmlTags(text: string): string {
