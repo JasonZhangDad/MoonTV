@@ -503,6 +503,29 @@ function PlayPageClient() {
     );
   }
 
+  function normalizeVideoTitle(title: string): string {
+    return title
+      .replace(/\s+/g, '')
+      .replace(/[《》「」『』【】\[\]（）()]/g, '')
+      .toLowerCase();
+  }
+
+  function isLooseTitleMatch(resultTitle: string, targetTitle: string): boolean {
+    const normalizedResult = normalizeVideoTitle(resultTitle);
+    const normalizedTarget = normalizeVideoTitle(targetTitle);
+    return (
+      normalizedResult === normalizedTarget ||
+      normalizedResult.includes(normalizedTarget) ||
+      normalizedTarget.includes(normalizedResult)
+    );
+  }
+
+  function isYearMatch(resultYear: string | undefined, targetYear: string): boolean {
+    if (!targetYear) return true;
+    if (!resultYear || resultYear === 'unknown') return true;
+    return resultYear.toLowerCase() === targetYear.toLowerCase();
+  }
+
   function resolveHlsRequestUrl(url: string): string {
     try {
       const parsed = new URL(url);
@@ -717,19 +740,29 @@ function PlayPageClient() {
         }
         const data = await response.json();
 
-        // 处理搜索结果，根据规则过滤
-        const results = data.results.filter(
+        const allResults = Array.isArray(data.results) ? data.results : [];
+        const matchesSearchType = (result: SearchResult) =>
+          searchType
+            ? (searchType === 'tv' && result.episodes.length > 1) ||
+              (searchType === 'movie' && result.episodes.length === 1)
+            : true;
+
+        const targetTitle = videoTitleRef.current;
+        const strictResults = allResults.filter(
           (result: SearchResult) =>
-            result.title.replaceAll(' ', '').toLowerCase() ===
-              videoTitleRef.current.replaceAll(' ', '').toLowerCase() &&
-            (videoYearRef.current
-              ? result.year.toLowerCase() === videoYearRef.current.toLowerCase()
-              : true) &&
-            (searchType
-              ? (searchType === 'tv' && result.episodes.length > 1) ||
-                (searchType === 'movie' && result.episodes.length === 1)
-              : true)
+            normalizeVideoTitle(result.title) === normalizeVideoTitle(targetTitle) &&
+            isYearMatch(result.year, videoYearRef.current) &&
+            matchesSearchType(result)
         );
+        const results =
+          strictResults.length > 0
+            ? strictResults
+            : allResults.filter(
+                (result: SearchResult) =>
+                  isLooseTitleMatch(result.title, targetTitle) &&
+                  isYearMatch(result.year, videoYearRef.current) &&
+                  matchesSearchType(result)
+              );
         setAvailableSources(results);
         return results;
       } catch (err) {
@@ -775,6 +808,15 @@ function PlayPageClient() {
           ? '🎬 正在获取视频详情...'
           : '🔍 正在搜索播放源...'
       );
+
+      if (currentSource && currentId && !needPreferRef.current) {
+        const detailSources = await fetchSourceDetail(currentSource, currentId);
+        if (detailSources.length > 0) {
+          applySource(detailSources[0]);
+          setLoading(false);
+          return;
+        }
+      }
 
       let sourcesInfo = await fetchSourcesData(searchTitle || videoTitle);
       if (
@@ -924,12 +966,19 @@ function PlayPageClient() {
         }
       }
 
-      const newDetail = availableSources.find(
+      let newDetail = availableSources.find(
         (source) => source.source === newSource && source.id === newId
       );
       if (!newDetail) {
-        setError('未找到匹配结果');
-        return;
+        const detailResponse = await fetch(
+          `/api/detail?source=${newSource}&id=${newId}`
+        );
+        if (detailResponse.ok) {
+          newDetail = (await detailResponse.json()) as SearchResult;
+        }
+      }
+      if (!newDetail) {
+        throw new Error('未找到匹配结果');
       }
 
       // 尝试跳转到当前正在播放的集数
