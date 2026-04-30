@@ -124,6 +124,9 @@ function PlayPageClient() {
   const detailRef = useRef<SearchResult | null>(detail);
   const currentEpisodeIndexRef = useRef(currentEpisodeIndex);
   const hlsBaseUrlRef = useRef('');
+  const isWebkit =
+    typeof window !== 'undefined' &&
+    typeof (window as any).webkitConvertPointFromNodeToPage === 'function';
 
   // 同步最新值到 refs
   useEffect(() => {
