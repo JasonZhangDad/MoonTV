@@ -122,12 +122,31 @@ export function processDoubanUrl(originalUrl: string): string {
 }
 
 /**
- * 处理视频播放 URL，统一走播放代理
+ * 获取视频播放 URL 候选，优先直连，失败时再回退到播放代理。
+ */
+export function getVideoUrlCandidates(originalUrl: string): string[] {
+  if (!originalUrl) return [];
+
+  const sourceUrl = extractOriginalUrl(originalUrl);
+  const candidates = new Set<string>();
+
+  candidates.add(sourceUrl);
+  if (!shouldBypassVideoProxy(sourceUrl)) {
+    candidates.add(getProxiedVideoUrl(sourceUrl));
+  }
+
+  return Array.from(candidates);
+}
+
+/**
+ * 处理视频播放 URL，默认优先直连，由 HLS loader 负责失败回退。
  */
 export function processVideoUrl(originalUrl: string): string {
-  if (!originalUrl) return originalUrl;
+  return getVideoUrlCandidates(originalUrl)[0] || originalUrl;
+}
+
+function getProxiedVideoUrl(originalUrl: string): string {
   if (originalUrl.startsWith(DEFAULT_VIDEO_PROXY)) return originalUrl;
-  if (shouldBypassVideoProxy(originalUrl)) return originalUrl;
   return `${DEFAULT_VIDEO_PROXY}${encodeURIComponent(originalUrl)}`;
 }
 
@@ -162,45 +181,47 @@ export async function getVideoResolutionFromM3u8(m3u8Url: string): Promise<{
   loadSpeed: string;
   pingTime: number;
 }> {
-  const proxied = processVideoUrl(m3u8Url);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 3000);
-  const start = performance.now();
+  for (const url of getVideoUrlCandidates(m3u8Url)) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    const start = performance.now();
 
-  try {
-    const res = await fetch(proxied, { signal: controller.signal });
-    const pingTime = Math.round(performance.now() - start);
-    clearTimeout(timer);
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      const pingTime = Math.round(performance.now() - start);
 
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-    const text = await res.text();
-    const elapsed = performance.now() - start;
+      const text = await res.text();
+      const elapsed = performance.now() - start;
 
-    // 根据下载字节数和耗时估算速度
-    const speedKBps = (text.length / 1024) / (elapsed / 1000);
-    const loadSpeed =
-      speedKBps >= 1024
-        ? `${(speedKBps / 1024).toFixed(1)} MB/s`
-        : `${speedKBps.toFixed(1)} KB/s`;
+      // 根据下载字节数和耗时估算速度
+      const speedKBps = (text.length / 1024) / (elapsed / 1000);
+      const loadSpeed =
+        speedKBps >= 1024
+          ? `${(speedKBps / 1024).toFixed(1)} MB/s`
+          : `${speedKBps.toFixed(1)} KB/s`;
 
-    // 从 master playlist 的 RESOLUTION= 解析最高画质
-    const resMatches = Array.from(text.matchAll(/RESOLUTION=(\d+)x(\d+)/gi));
-    let quality = '未知';
-    if (resMatches.length > 0) {
-      const maxH = Math.max(...resMatches.map((m) => parseInt(m[2])));
-      quality =
-        maxH >= 2160 ? '4K' :
-        maxH >= 1440 ? '2K' :
-        maxH >= 1080 ? '1080p' :
-        maxH >= 720  ? '720p' :
-        maxH >= 480  ? '480p' : 'SD';
+      // 从 master playlist 的 RESOLUTION= 解析最高画质
+      const resMatches = Array.from(text.matchAll(/RESOLUTION=(\d+)x(\d+)/gi));
+      let quality = '未知';
+      if (resMatches.length > 0) {
+        const maxH = Math.max(...resMatches.map((m) => parseInt(m[2])));
+        quality =
+          maxH >= 2160 ? '4K' :
+          maxH >= 1440 ? '2K' :
+          maxH >= 1080 ? '1080p' :
+          maxH >= 720  ? '720p' :
+          maxH >= 480  ? '480p' : 'SD';
+      }
+
+      return { quality, loadSpeed, pingTime };
+    } catch (_error) {
+      void _error;
+    } finally {
+      clearTimeout(timer);
     }
-
-    return { quality, loadSpeed, pingTime };
-  } catch {
-    throw new Error('source unreachable');
-  } finally {
-    clearTimeout(timer);
   }
+
+  throw new Error('source unreachable');
 }

@@ -24,6 +24,7 @@ import {
 import { SearchResult } from '@/lib/types';
 import {
   getVideoResolutionFromM3u8,
+  getVideoUrlCandidates,
   processVideoUrl,
 } from '@/lib/utils';
 
@@ -657,7 +658,29 @@ function PlayPageClient() {
       super(config);
       const load = this.load.bind(this);
       this.load = function (context: any, config: any, callbacks: any) {
+        const originalUrl = context.url;
         context.url = resolveHlsRequestUrl(context.url);
+        const fallbackUrls = getVideoUrlCandidates(originalUrl)
+          .map((url) => resolveHlsRequestUrl(url))
+          .filter((url, index, urls) => url !== context.url && urls.indexOf(url) === index);
+        const onError = callbacks.onError;
+        callbacks.onError = function (
+          error: any,
+          context: any,
+          networkDetails: any,
+          stats: any
+        ) {
+          const fallbackUrl = fallbackUrls.shift();
+          if (fallbackUrl) {
+            context.url = fallbackUrl;
+            load(context, config, callbacks);
+            return;
+          }
+
+          if (onError) {
+            return onError(error, context, networkDetails, stats);
+          }
+        };
 
         // 拦截manifest和level请求
         if (
