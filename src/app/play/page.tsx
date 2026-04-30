@@ -826,7 +826,7 @@ function PlayPageClient() {
               handleSourceChange(bestSource.source, bestSource.id, bestSource.title);
             }
           })
-          .catch(() => {/* 优选失败，继续用当前源 */});
+          .catch((_e) => void 0);
       }
     };
 
@@ -1656,7 +1656,7 @@ function PlayPageClient() {
             const nextUrl = processVideoUrl(d.episodes[nextIdx]);
             if (!prefetchedEpisodesRef.current.has(nextUrl)) {
               prefetchedEpisodesRef.current.add(nextUrl);
-              fetch(nextUrl, { priority: 'low' } as RequestInit).catch(() => {});
+              fetch(nextUrl, { priority: 'low' } as RequestInit).catch((_e) => void 0);
             }
           }
         }
