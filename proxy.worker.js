@@ -2,6 +2,9 @@
 
 const PROXY_ORIGIN = 'https://play.magies.top';
 const SEGMENT_CACHE_TTL = 3600; // .ts 分片缓存 1 小时
+const DIRECT_PLAY_HOST_PATTERNS = [
+  /(^|\.)ffzy-play\d+\.com$/i,
+];
 
 addEventListener('fetch', (event) => {
   event.respondWith(handleRequest(event.request, event));
@@ -29,6 +32,18 @@ async function handleRequest(request, event) {
     const actualUrlStr = getTargetUrl(url);
     if (!actualUrlStr) {
       return jsonResponse({ error: 'Missing target url' }, 400);
+    }
+
+    if (shouldRedirectDirect(actualUrlStr)) {
+      const response = new Response(null, {
+        status: 302,
+        headers: {
+          Location: actualUrlStr,
+          'Cache-Control': 'no-store',
+        },
+      });
+      setCorsHeaders(response.headers);
+      return response;
     }
 
     // .ts / .m4s 分片：先查 CF 边缘缓存，命中则直接返回
@@ -88,7 +103,7 @@ async function handleRequest(request, event) {
     });
 
     // 分片走边缘缓存；m3u8 和其他内容禁止缓存
-    if (shouldCache && !bodyModified) {
+    if (shouldCache && response.ok && !bodyModified) {
       modifiedResponse.headers.set(
         'Cache-Control',
         `public, max-age=${SEGMENT_CACHE_TTL}, s-maxage=${SEGMENT_CACHE_TTL}`
@@ -263,6 +278,15 @@ function setNoCacheHeaders(headers) {
 function isSegmentUrl(url) {
   try {
     return /\.(ts|m4s)(\?|$)/i.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
+function shouldRedirectDirect(url) {
+  try {
+    const { hostname } = new URL(url);
+    return DIRECT_PLAY_HOST_PATTERNS.some((pattern) => pattern.test(hostname));
   } catch {
     return false;
   }
