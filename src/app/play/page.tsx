@@ -624,6 +624,7 @@ function PlayPageClient() {
           (context as any).type === 'manifest' ||
           (context as any).type === 'level'
         ) {
+          context.responseType = 'text';
           const onSuccess = callbacks.onSuccess;
           callbacks.onSuccess = function (
             response: any,
@@ -631,8 +632,9 @@ function PlayPageClient() {
             context: any
           ) {
             // 如果是m3u8文件，处理内容以移除广告分段
-            if (response.data && typeof response.data === 'string') {
-              response.data = rewriteM3U8Urls(response.data, context.url);
+            const responseText = getM3U8ResponseText(response.data);
+            if (responseText) {
+              response.data = rewriteM3U8Urls(responseText, context.url);
               if (blockAdEnabledRef.current) {
                 // 过滤掉广告段 - 实现更精确的广告过滤逻辑
                 response.data = filterAdsFromM3U8(response.data);
@@ -645,6 +647,18 @@ function PlayPageClient() {
         load(context, config, callbacks);
       };
     }
+  }
+
+  function getM3U8ResponseText(data: any): string {
+    if (!data) return '';
+    if (typeof data === 'string') return data;
+    if (data instanceof ArrayBuffer) {
+      return new TextDecoder('utf-8').decode(data);
+    }
+    if (ArrayBuffer.isView(data)) {
+      return new TextDecoder('utf-8').decode(data);
+    }
+    return '';
   }
 
   // 当集数索引变化时自动更新视频地址
