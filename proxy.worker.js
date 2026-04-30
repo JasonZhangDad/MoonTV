@@ -1,5 +1,7 @@
 /* eslint-disable */
 
+const PROXY_ORIGIN = 'https://play.magies.top';
+
 addEventListener('fetch', (event) => {
   event.respondWith(handleRequest(event.request));
 });
@@ -52,7 +54,7 @@ async function handleRequest(request) {
     const contentType = response.headers.get('Content-Type') || '';
 
     if (isM3u8Response(actualUrlStr, contentType)) {
-      body = rewriteM3u8Content(await response.text(), actualUrlStr, url.origin);
+      body = rewriteM3u8Content(await response.text(), actualUrlStr, PROXY_ORIGIN);
       bodyModified = true;
     } else if (contentType.includes('text/html')) {
       body = await handleHtmlContent(

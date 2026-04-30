@@ -1358,15 +1358,25 @@ function PlayPageClient() {
             if (video.hls) {
               video.hls.destroy();
             }
+            let networkErrorRetries = 0;
             const hls = new Hls({
-              debug: false, // 关闭日志
-              enableWorker: true, // WebWorker 解码，降低主线程压力
-              lowLatencyMode: true, // 开启低延迟 LL-HLS
+              debug: false,
+              enableWorker: true,
+              lowLatencyMode: false, // VOD 流，LL-HLS 反而会导致卡顿
 
               /* 缓冲/内存相关 */
-              maxBufferLength: 30, // 前向缓冲最大 30s，过大容易导致高延迟
-              backBufferLength: 30, // 仅保留 30s 已播放内容，避免内存占用
-              maxBufferSize: 60 * 1000 * 1000, // 约 60MB，超出后触发清理
+              maxBufferLength: 60,              // 前向缓冲 60s，代理延迟高时更流畅
+              backBufferLength: 30,
+              maxBufferSize: 100 * 1000 * 1000, // 100MB
+
+              /* 质量选择 */
+              startLevel: -1, // 自动选择初始质量级别
+
+              /* 重试策略 */
+              fragLoadingMaxRetry: 6,
+              fragLoadingRetryDelay: 1000,
+              levelLoadingMaxRetry: 4,
+              manifestLoadingMaxRetry: 3,
 
               /* 自定义loader */
               loader: CustomHlsJsLoader,
@@ -1385,22 +1395,26 @@ function PlayPageClient() {
             ensureVideoSource(video, url);
 
             hls.on(Hls.Events.ERROR, function (event: any, data: any) {
-              console.error('HLS Error:', event, data);
-              if (data.fatal) {
-                switch (data.type) {
-                  case Hls.ErrorTypes.NETWORK_ERROR:
-                    console.log('网络错误，尝试恢复...');
+              if (!data.fatal) return;
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  if (networkErrorRetries < 3) {
+                    networkErrorRetries++;
+                    console.warn(`网络错误，第 ${networkErrorRetries} 次重试...`);
                     hls.startLoad();
-                    break;
-                  case Hls.ErrorTypes.MEDIA_ERROR:
-                    console.log('媒体错误，尝试恢复...');
-                    hls.recoverMediaError();
-                    break;
-                  default:
-                    console.log('无法恢复的错误');
+                  } else {
+                    console.error('网络错误超过重试上限，放弃');
                     hls.destroy();
-                    break;
-                }
+                  }
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  console.warn('媒体错误，尝试恢复...');
+                  hls.recoverMediaError();
+                  break;
+                default:
+                  console.error('无法恢复的错误', data);
+                  hls.destroy();
+                  break;
               }
             });
           },
