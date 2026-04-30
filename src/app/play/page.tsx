@@ -123,6 +123,7 @@ function PlayPageClient() {
   const videoYearRef = useRef(videoYear);
   const detailRef = useRef<SearchResult | null>(detail);
   const currentEpisodeIndexRef = useRef(currentEpisodeIndex);
+  const hlsBaseUrlRef = useRef('');
 
   // 同步最新值到 refs
   useEffect(() => {
@@ -415,6 +416,7 @@ function PlayPageClient() {
       return;
     }
     const playUrl = detailData?.episodes[episodeIndex] || '';
+    hlsBaseUrlRef.current = playUrl;
     const newUrl = processVideoUrl(playUrl);
     if (newUrl !== videoUrl) {
       setVideoUrl(newUrl);
@@ -474,6 +476,7 @@ function PlayPageClient() {
     if (!m3u8Content || !playlistUrl) return m3u8Content;
 
     const originalPlaylistUrl = getOriginalUrlFromProxy(playlistUrl);
+    hlsBaseUrlRef.current = originalPlaylistUrl;
 
     return m3u8Content
       .split('\n')
@@ -507,6 +510,28 @@ function PlayPageClient() {
       return ['http:', 'https:'].includes(parsed.protocol)
         ? processVideoUrl(url)
         : url;
+    } catch {
+      return url;
+    }
+  }
+
+  function resolveHlsRequestUrl(url: string): string {
+    try {
+      const parsed = new URL(url);
+      if (parsed.searchParams.has('url')) return url;
+      if (parsed.hostname !== 'play.magies.top') return url;
+
+      const baseUrl = hlsBaseUrlRef.current;
+      if (!baseUrl) return url;
+
+      const path = parsed.pathname.replace(/^\/+/, '');
+      if (!path) return url;
+
+      const targetUrl = /^\d{8}\//.test(path)
+        ? new URL(`/${path}`, baseUrl).toString()
+        : new URL(path, baseUrl).toString();
+
+      return processVideoUrl(targetUrl);
     } catch {
       return url;
     }
@@ -619,6 +644,8 @@ function PlayPageClient() {
       super(config);
       const load = this.load.bind(this);
       this.load = function (context: any, config: any, callbacks: any) {
+        context.url = resolveHlsRequestUrl(context.url);
+
         // 拦截manifest和level请求
         if (
           (context as any).type === 'manifest' ||
