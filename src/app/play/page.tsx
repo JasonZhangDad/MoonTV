@@ -426,14 +426,8 @@ function PlayPageClient() {
   const ensureVideoSource = (video: HTMLVideoElement | null, url: string) => {
     if (!video || !url) return;
     const sources = Array.from(video.getElementsByTagName('source'));
-    const existed = sources.some((s) => s.src === url);
-    if (!existed) {
-      // 移除旧的 source，保持唯一
-      sources.forEach((s) => s.remove());
-      const sourceEl = document.createElement('source');
-      sourceEl.src = url;
-      video.appendChild(sourceEl);
-    }
+    // HLS 由 hls.js 接管；保留 source 会让浏览器绕过自定义 loader 直连分片。
+    sources.forEach((s) => s.remove());
 
     // 始终允许远程播放（AirPlay / Cast）
     video.disableRemotePlayback = false;
@@ -1289,27 +1283,6 @@ function PlayPageClient() {
     }
     console.log(videoUrl);
 
-    // 检测是否为WebKit浏览器
-    const isWebkit =
-      typeof window !== 'undefined' &&
-      typeof (window as any).webkitConvertPointFromNodeToPage === 'function';
-
-    // 非WebKit浏览器且播放器已存在，使用switch方法切换
-    if (!isWebkit && artPlayerRef.current) {
-      artPlayerRef.current.switch = videoUrl;
-      artPlayerRef.current.title = `${videoTitle} - 第${
-        currentEpisodeIndex + 1
-      }集`;
-      artPlayerRef.current.poster = videoCover;
-      if (artPlayerRef.current?.video) {
-        ensureVideoSource(
-          artPlayerRef.current.video as HTMLVideoElement,
-          videoUrl
-        );
-      }
-      return;
-    }
-
     // WebKit浏览器或首次创建：销毁之前的播放器实例并创建新的
     if (artPlayerRef.current) {
       if (artPlayerRef.current.video && artPlayerRef.current.video.hls) {
@@ -1383,6 +1356,12 @@ function PlayPageClient() {
 
               /* 自定义loader */
               loader: CustomHlsJsLoader,
+              xhrSetup: (xhr: XMLHttpRequest, url: string) => {
+                const resolvedUrl = resolveHlsRequestUrl(url);
+                if (resolvedUrl !== url) {
+                  xhr.open('GET', resolvedUrl, true);
+                }
+              },
             });
 
             hls.loadSource(url);
