@@ -8,8 +8,14 @@ async function handleRequest(request) {
   try {
     const url = new URL(request.url);
 
+    if (request.method === 'OPTIONS') {
+      const response = new Response(null, { status: 204 });
+      setCorsHeaders(response.headers);
+      return response;
+    }
+
     // 如果访问根目录，返回HTML
-    if (url.pathname === '/') {
+    if (url.pathname === '/' && !url.searchParams.has('url')) {
       return new Response(getRootHtml(), {
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
@@ -17,19 +23,17 @@ async function handleRequest(request) {
       });
     }
 
-    // 从请求路径中提取目标 URL
-    let actualUrlStr = decodeURIComponent(url.pathname.replace('/', ''));
-
-    // 判断用户输入的 URL 是否带有协议
-    actualUrlStr = ensureProtocol(actualUrlStr, url.protocol);
-
-    // 保留查询参数
-    actualUrlStr += url.search;
+    const actualUrlStr = getTargetUrl(url);
+    if (!actualUrlStr) {
+      return jsonResponse({ error: 'Missing target url' }, 400);
+    }
 
     // 创建新 Headers 对象，排除以 'cf-' 开头的请求头
     const newHeaders = filterHeaders(
       request.headers,
-      (name) => !name.startsWith('cf-')
+      (name) =>
+        !name.startsWith('cf-') &&
+        !['host', 'origin', 'referer'].includes(name.toLowerCase())
     );
 
     // 创建一个新的请求以访问目标 URL
@@ -43,13 +47,16 @@ async function handleRequest(request) {
     // 发起对目标 URL 的请求
     const response = await fetch(modifiedRequest);
     let body = response.body;
+    const contentType = response.headers.get('Content-Type') || '';
 
     // 处理重定向
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       body = response.body;
       // 创建新的 Response 对象以修改 Location 头部
-      return handleRedirect(response, body);
-    } else if (response.headers.get('Content-Type')?.includes('text/html')) {
+      return handleRedirect(response, body, url.origin);
+    } else if (isM3u8Response(actualUrlStr, contentType)) {
+      body = rewriteM3u8Content(await response.text(), actualUrlStr, url.origin);
+    } else if (contentType.includes('text/html')) {
       body = await handleHtmlContent(
         response,
         url.protocol,
@@ -83,6 +90,19 @@ async function handleRequest(request) {
   }
 }
 
+function getTargetUrl(url) {
+  const queryUrl = url.searchParams.get('url');
+  if (queryUrl) {
+    return ensureProtocol(queryUrl, url.protocol);
+  }
+
+  const pathUrl = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+  if (!pathUrl) return '';
+
+  const targetUrl = ensureProtocol(pathUrl, url.protocol);
+  return targetUrl + url.search;
+}
+
 // 确保 URL 带有协议
 function ensureProtocol(url, defaultProtocol) {
   return url.startsWith('http://') || url.startsWith('https://')
@@ -91,9 +111,9 @@ function ensureProtocol(url, defaultProtocol) {
 }
 
 // 处理重定向
-function handleRedirect(response, body) {
+function handleRedirect(response, body, proxyOrigin) {
   const location = new URL(response.headers.get('location'));
-  const modifiedLocation = `/${encodeURIComponent(location.toString())}`;
+  const modifiedLocation = proxyUrl(location.toString(), proxyOrigin);
   return new Response(body, {
     status: response.status,
     statusText: response.statusText,
@@ -122,6 +142,42 @@ async function handleHtmlContent(response, protocol, host, actualUrlStr) {
 function replaceRelativePaths(text, protocol, host, origin) {
   const regex = new RegExp('((href|src|action)=["\'])/(?!/)', 'g');
   return text.replace(regex, `$1${protocol}//${host}/${origin}/`);
+}
+
+function isM3u8Response(actualUrlStr, contentType) {
+  return (
+    actualUrlStr.includes('.m3u8') ||
+    contentType.includes('application/vnd.apple.mpegurl') ||
+    contentType.includes('application/x-mpegurl') ||
+    contentType.includes('audio/mpegurl')
+  );
+}
+
+function rewriteM3u8Content(text, playlistUrl, proxyOrigin) {
+  return text
+    .split('\n')
+    .map((line) => rewriteM3u8Line(line, playlistUrl, proxyOrigin))
+    .join('\n');
+}
+
+function rewriteM3u8Line(line, playlistUrl, proxyOrigin) {
+  const trimmed = line.trim();
+  if (!trimmed) return line;
+
+  const uriAttrMatch = line.match(/URI="([^"]+)"/);
+  if (uriAttrMatch) {
+    const absoluteUri = new URL(uriAttrMatch[1], playlistUrl).toString();
+    return line.replace(uriAttrMatch[1], proxyUrl(absoluteUri, proxyOrigin));
+  }
+
+  if (trimmed.startsWith('#')) return line;
+
+  const absoluteUrl = new URL(trimmed, playlistUrl).toString();
+  return line.replace(trimmed, proxyUrl(absoluteUrl, proxyOrigin));
+}
+
+function proxyUrl(targetUrl, proxyOrigin) {
+  return `${proxyOrigin}/?url=${encodeURIComponent(targetUrl)}`;
 }
 
 // 返回 JSON 格式的响应
