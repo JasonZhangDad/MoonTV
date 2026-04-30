@@ -489,27 +489,36 @@ function PlayPageClient() {
       const uriAttrMatch = line.match(/URI="([^"]+)"/);
       if (uriAttrMatch) {
         const absoluteUri = new URL(uriAttrMatch[1], playlistUrl).toString();
-        return line.replace(uriAttrMatch[1], proxyHttpUrl(absoluteUri));
+        return line.replace(uriAttrMatch[1], resolvePlaylistResourceUrl(absoluteUri));
       }
 
       if (trimmed.startsWith('#')) return line;
 
       const absoluteUrl = new URL(trimmed, playlistUrl).toString();
-      return line.replace(trimmed, proxyHttpUrl(absoluteUrl));
+      return line.replace(trimmed, resolvePlaylistResourceUrl(absoluteUrl));
     } catch {
       return line;
     }
   }
 
-  function proxyHttpUrl(url: string): string {
+  function resolvePlaylistResourceUrl(url: string): string {
     try {
       const parsed = new URL(url);
-      return ['http:', 'https:'].includes(parsed.protocol)
-        ? processVideoUrl(url)
-        : url;
+      if (!['http:', 'https:'].includes(parsed.protocol)) return url;
+
+      // 分片直连，避免部分资源站拒绝 Cloudflare Worker 拉取媒体内容导致 521。
+      if (isMediaSegmentUrl(parsed)) return url;
+
+      return processVideoUrl(url);
     } catch {
       return url;
     }
+  }
+
+  function isMediaSegmentUrl(url: URL): boolean {
+    return /\.(ts|m4s|mp4|m4v|aac|mp3|vtt)(\?|$)/i.test(
+      `${url.pathname}${url.search}`
+    );
   }
 
   function resolveHlsRequestUrl(url: string): string {
@@ -528,7 +537,9 @@ function PlayPageClient() {
         ? new URL(`/${path}`, baseUrl).toString()
         : new URL(path, baseUrl).toString();
 
-      return processVideoUrl(targetUrl);
+      return isMediaSegmentUrl(new URL(targetUrl))
+        ? targetUrl
+        : processVideoUrl(targetUrl);
     } catch {
       return url;
     }
