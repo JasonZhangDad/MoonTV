@@ -4,6 +4,8 @@ const DEFAULT_VIDEO_PROXY = 'https://play.magies.top/?url=';
 const DEFAULT_IMAGE_PROXY = 'https://img.magies.top/?url=';
 const IMAGE_PROXY_FALLBACK = '/api/image-proxy?url=';
 const VIDEO_PROXY_BYPASS_HOST_PATTERNS = [
+  /(^|\.)bfllvip\.com$/i,
+  /(^|\.)dytt-kan\.com$/i,
   /(^|\.)ffzy-play\d+\.com$/i,
 ];
 

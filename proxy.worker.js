@@ -3,6 +3,8 @@
 const PROXY_ORIGIN = 'https://play.magies.top';
 const SEGMENT_CACHE_TTL = 3600; // .ts 分片缓存 1 小时
 const DIRECT_PLAY_HOST_PATTERNS = [
+  /(^|\.)bfllvip\.com$/i,
+  /(^|\.)dytt-kan\.com$/i,
   /(^|\.)ffzy-play\d+\.com$/i,
 ];
 
