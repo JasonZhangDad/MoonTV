@@ -35,6 +35,7 @@ async function handleRequest(request) {
         !name.startsWith('cf-') &&
         !['host', 'origin', 'referer'].includes(name.toLowerCase())
     );
+    setUpstreamHeaders(newHeaders, actualUrlStr);
 
     // 创建一个新的请求以访问目标 URL
     const modifiedRequest = new Request(actualUrlStr, {
@@ -117,6 +118,26 @@ function ensureProtocol(url, defaultProtocol) {
   return url.startsWith('http://') || url.startsWith('https://')
     ? url
     : defaultProtocol + '//' + url;
+}
+
+function setUpstreamHeaders(headers, actualUrlStr) {
+  headers.set(
+    'User-Agent',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
+  );
+
+  try {
+    const targetUrl = new URL(actualUrlStr);
+    if (targetUrl.hostname.endsWith('doubanio.com')) {
+      headers.set('Referer', 'https://movie.douban.com/');
+      headers.set('Accept', 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8');
+      return;
+    }
+
+    headers.set('Referer', targetUrl.origin + '/');
+  } catch {
+    // keep default headers
+  }
 }
 
 // 处理重定向
