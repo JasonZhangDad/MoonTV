@@ -123,18 +123,8 @@ export async function getVideoResolutionFromM3u8(m3u8Url: string): Promise<{
       video.muted = true;
       video.preload = 'metadata';
 
-      // 测量网络延迟（ping时间） - 使用m3u8 URL而不是ts文件
       const pingStart = performance.now();
       let pingTime = 0;
-
-      // 测量ping时间（使用m3u8 URL）
-      fetch(finalM3u8Url, { method: 'HEAD', mode: 'no-cors' })
-        .then(() => {
-          pingTime = performance.now() - pingStart;
-        })
-        .catch(() => {
-          pingTime = performance.now() - pingStart; // 记录到失败为止的时间
-        });
 
       // 固定使用hls.js加载
       const hls = new Hls();
@@ -250,6 +240,7 @@ export async function getVideoResolutionFromM3u8(m3u8Url: string): Promise<{
 
       // 监听视频元数据加载完成
       video.onloadedmetadata = () => {
+        pingTime = performance.now() - pingStart;
         hasMetadataLoaded = true;
         checkAndResolve(); // 尝试返回结果
       };
