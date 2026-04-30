@@ -201,6 +201,7 @@ function PlayPageClient() {
 
   const artPlayerRef = useRef<any>(null);
   const artRef = useRef<HTMLDivElement | null>(null);
+  const prefetchedEpisodesRef = useRef<Set<string>>(new Set());
 
   // -----------------------------------------------------------------------------
   // 工具函数（Utils）
@@ -739,6 +740,27 @@ function PlayPageClient() {
       }
     };
 
+    // 将源信息应用到播放器状态并更新 URL
+    const applySource = (src: SearchResult) => {
+      setNeedPrefer(false);
+      setCurrentSource(src.source);
+      setCurrentId(src.id);
+      setVideoYear(src.year);
+      setVideoTitle(src.title || videoTitleRef.current);
+      setVideoCover(src.poster);
+      setDetail(src);
+      if (currentEpisodeIndex >= src.episodes.length) {
+        setCurrentEpisodeIndex(0);
+      }
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.set('source', src.source);
+      newUrl.searchParams.set('id', src.id);
+      newUrl.searchParams.set('year', src.year);
+      newUrl.searchParams.set('title', src.title);
+      newUrl.searchParams.delete('prefer');
+      window.history.replaceState({}, '', newUrl.toString());
+    };
+
     const initAll = async () => {
       if (!currentSource && !currentId && !videoTitle && !searchTitle) {
         setError('缺少必要参数');
@@ -769,55 +791,42 @@ function PlayPageClient() {
         return;
       }
 
-      let detailData: SearchResult = sourcesInfo[0];
-      // 指定源和id且无需优选
+      // 指定源且无需优选 → 直接播放，不测速
       if (currentSource && currentId && !needPreferRef.current) {
         const target = sourcesInfo.find(
           (source) => source.source === currentSource && source.id === currentId
         );
-        if (target) {
-          detailData = target;
-        } else {
+        if (!target) {
           setError('未找到匹配结果');
           setLoading(false);
           return;
         }
+        applySource(target);
+        setLoading(false);
+        return;
       }
 
-      // 未指定源和 id 或需要优选，且开启优选开关
-      if (
-        (!currentSource || !currentId || needPreferRef.current) &&
-        optimizationEnabled
-      ) {
-        setLoadingStage('preferring');
-        setLoadingMessage('⚡ 正在优选最佳播放源...');
-
-        detailData = await preferBestSource(sourcesInfo);
-      }
-
-      console.log(detailData.source, detailData.id);
-
-      setNeedPrefer(false);
-      setCurrentSource(detailData.source);
-      setCurrentId(detailData.id);
-      setVideoYear(detailData.year);
-      setVideoTitle(detailData.title || videoTitleRef.current);
-      setVideoCover(detailData.poster);
-      setDetail(detailData);
-      if (currentEpisodeIndex >= detailData.episodes.length) {
-        setCurrentEpisodeIndex(0);
-      }
-
-      // 规范URL参数
-      const newUrl = new URL(window.location.href);
-      newUrl.searchParams.set('source', detailData.source);
-      newUrl.searchParams.set('id', detailData.id);
-      newUrl.searchParams.set('year', detailData.year);
-      newUrl.searchParams.set('title', detailData.title);
-      newUrl.searchParams.delete('prefer');
-      window.history.replaceState({}, '', newUrl.toString());
-
+      // 先播第一个源，立即开始，不等测速
+      const firstSource = sourcesInfo[0];
+      applySource(firstSource);
       setLoading(false);
+
+      // 后台优选：不阻塞 UI，找到更好的源则在 60s 内自动切换
+      if (optimizationEnabled && sourcesInfo.length > 1) {
+        preferBestSource(sourcesInfo)
+          .then((bestSource) => {
+            if (
+              bestSource.source === currentSourceRef.current &&
+              bestSource.id === currentIdRef.current
+            ) return;
+            const playedTime = artPlayerRef.current?.currentTime || 0;
+            if (playedTime < 60) {
+              resumeTimeRef.current = playedTime > 1 ? playedTime : null;
+              handleSourceChange(bestSource.source, bestSource.id, bestSource.title);
+            }
+          })
+          .catch(() => {/* 优选失败，继续用当前源 */});
+      }
     };
 
     initAll();
@@ -1632,6 +1641,21 @@ function PlayPageClient() {
         if (now - lastSaveTimeRef.current > interval) {
           saveCurrentPlayProgress();
           lastSaveTimeRef.current = now;
+        }
+
+        // 进度过 80% 时预取下一集 m3u8，消除集数切换延迟
+        const currentTime = artPlayerRef.current?.currentTime || 0;
+        const duration = artPlayerRef.current?.duration || 0;
+        if (duration > 0 && currentTime / duration > 0.8) {
+          const nextIdx = currentEpisodeIndexRef.current + 1;
+          const d = detailRef.current;
+          if (d?.episodes && nextIdx < d.episodes.length) {
+            const nextUrl = processVideoUrl(d.episodes[nextIdx]);
+            if (!prefetchedEpisodesRef.current.has(nextUrl)) {
+              prefetchedEpisodesRef.current.add(nextUrl);
+              fetch(nextUrl, { priority: 'low' } as RequestInit).catch(() => {});
+            }
+          }
         }
       });
 
