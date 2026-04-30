@@ -1,12 +1,13 @@
 /* eslint-disable */
 
 const PROXY_ORIGIN = 'https://play.magies.top';
+const SEGMENT_CACHE_TTL = 3600; // .ts 分片缓存 1 小时
 
 addEventListener('fetch', (event) => {
-  event.respondWith(handleRequest(event.request));
+  event.respondWith(handleRequest(event.request, event));
 });
 
-async function handleRequest(request) {
+async function handleRequest(request, event) {
   try {
     const url = new URL(request.url);
 
@@ -28,6 +29,13 @@ async function handleRequest(request) {
     const actualUrlStr = getTargetUrl(url);
     if (!actualUrlStr) {
       return jsonResponse({ error: 'Missing target url' }, 400);
+    }
+
+    // .ts / .m4s 分片：先查 CF 边缘缓存，命中则直接返回
+    const shouldCache = request.method === 'GET' && isSegmentUrl(actualUrlStr);
+    if (shouldCache) {
+      const cached = await caches.default.match(request.url);
+      if (cached) return cached;
     }
 
     // 创建新 Headers 对象，排除以 'cf-' 开头的请求头
@@ -79,8 +87,16 @@ async function handleRequest(request) {
       headers: responseHeaders,
     });
 
-    // 添加禁用缓存的头部
-    setNoCacheHeaders(modifiedResponse.headers);
+    // 分片走边缘缓存；m3u8 和其他内容禁止缓存
+    if (shouldCache && !bodyModified) {
+      modifiedResponse.headers.set(
+        'Cache-Control',
+        `public, max-age=${SEGMENT_CACHE_TTL}, s-maxage=${SEGMENT_CACHE_TTL}`
+      );
+      event.waitUntil(caches.default.put(request.url, modifiedResponse.clone()));
+    } else {
+      setNoCacheHeaders(modifiedResponse.headers);
+    }
 
     // 添加 CORS 头部，允许跨域访问
     setCorsHeaders(modifiedResponse.headers);
@@ -241,6 +257,15 @@ function filterHeaders(headers, filterFunc) {
 // 设置禁用缓存的头部
 function setNoCacheHeaders(headers) {
   headers.set('Cache-Control', 'no-store');
+}
+
+// 判断是否为媒体分片（.ts / .m4s），这类资源内容不变，可以缓存
+function isSegmentUrl(url) {
+  try {
+    return /\.(ts|m4s)(\?|$)/i.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
 }
 
 // 设置 CORS 头部

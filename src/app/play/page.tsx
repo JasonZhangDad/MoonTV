@@ -212,41 +212,21 @@ function PlayPageClient() {
   ): Promise<SearchResult> => {
     if (sources.length === 1) return sources[0];
 
-    // 将播放源均分为两批，并发测速各批，避免一次性过多请求
-    const batchSize = Math.ceil(sources.length / 2);
-    const allResults: Array<{
-      source: SearchResult;
-      testResult: { quality: string; loadSpeed: string; pingTime: number };
-    } | null> = [];
+    // 全部并发测速，4s 内谁响应算谁，不再串行分批
+    const settled = await Promise.allSettled(
+      sources.map(async (source) => {
+        if (!source.episodes || source.episodes.length === 0) {
+          throw new Error('no episodes');
+        }
+        const episodeUrl = source.episodes[0];
+        const testResult = await getVideoResolutionFromM3u8(episodeUrl);
+        return { source, testResult };
+      })
+    );
 
-    for (let start = 0; start < sources.length; start += batchSize) {
-      const batchSources = sources.slice(start, start + batchSize);
-      const batchResults = await Promise.all(
-        batchSources.map(async (source) => {
-          try {
-            // 检查是否有第一集的播放地址
-            if (!source.episodes || source.episodes.length === 0) {
-              console.warn(`播放源 ${source.source_name} 没有可用的播放地址`);
-              return null;
-            }
-
-            const episodeUrl =
-              source.episodes.length > 1
-                ? source.episodes[1]
-                : source.episodes[0];
-            const testResult = await getVideoResolutionFromM3u8(episodeUrl);
-
-            return {
-              source,
-              testResult,
-            };
-          } catch (error) {
-            return null;
-          }
-        })
-      );
-      allResults.push(...batchResults);
-    }
+    const allResults = settled.map((r) =>
+      r.status === 'fulfilled' ? r.value : null
+    );
 
     // 等待所有测速完成，包含成功和失败的结果
     // 保存所有测速结果到 precomputedVideoInfo，供 EpisodeSelector 使用（包含错误结果）
@@ -837,13 +817,7 @@ function PlayPageClient() {
       newUrl.searchParams.delete('prefer');
       window.history.replaceState({}, '', newUrl.toString());
 
-      setLoadingStage('ready');
-      setLoadingMessage('✨ 准备就绪，即将开始播放...');
-
-      // 短暂延迟让用户看到完成状态
-      setTimeout(() => {
-        setLoading(false);
-      }, 1000);
+      setLoading(false);
     };
 
     initAll();
