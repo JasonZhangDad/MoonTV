@@ -1425,23 +1425,25 @@ function PlayPageClient() {
               lowLatencyMode: false, // VOD 流，LL-HLS 反而会导致卡顿
 
               /* 极速缓冲预加载策略 */
-              maxBufferLength: 120,              // 大幅提升预先缓冲（从60s提升至120s）
-              maxMaxBufferLength: 600,           // 允许最大缓冲到600s
-              backBufferLength: 30,              // 后退缓冲保留30s
-              maxBufferSize: 200 * 1000 * 1000,  // 缓冲内存提升至200MB
-              highBufferWatchdogPeriod: 2,       // 提高缓冲监控频率
+              maxBufferLength: 180,              // 增加到 180 秒缓冲区
+              maxMaxBufferLength: 900,           // 允许最大缓冲到 900s
+              backBufferLength: 60,              // 后退缓冲保留 60s
+              maxBufferSize: 300 * 1000 * 1000,  // 缓冲内存提升至 300MB
+              highBufferWatchdogPeriod: 1,       // 提高监控频率
 
               /* 质量选择：偏向高画质 */
-              startLevel: -1,           // 自动选择初始质量级别
-              capLevelToPlayerSize: false, // 不因播放器尺寸限制画质
-              abrEwmaDefaultEstimate: 10 * 1024 * 1024, // 初始带宽估算提升至 10Mbps，加快极清轨道的加载
+              startLevel: -1,
+              capLevelToPlayerSize: false,
+              abrEwmaDefaultEstimate: 20 * 1024 * 1024, // 初始带宽估算提升至 20Mbps
 
-              /* 更加积极的重试与超时策略 */
-              fragLoadingMaxRetry: 8,
-              fragLoadingRetryDelay: 500,        // 缩短重试间隔，尽快重连
-              levelLoadingMaxRetry: 4,
-              manifestLoadingMaxRetry: 4,
-              fragLoadingTimeOut: 20000,         // 分片加载超时允许更长，以适应较慢的源
+              /* 积极的加载策略 */
+              fragLoadingMaxRetry: 10,
+              fragLoadingRetryDelay: 500,
+              levelLoadingMaxRetry: 5,
+              manifestLoadingMaxRetry: 5,
+              fragLoadingTimeOut: 30000,         // 允许更长的超时以应对大分片
+              manifestLoadingTimeOut: 20000,
+              levelLoadingTimeOut: 20000,
 
               /* 自定义loader */
               loader: CustomHlsJsLoader,

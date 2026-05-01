@@ -13,6 +13,18 @@ const VIDEO_PROXY_BYPASS_HOST_PATTERNS = [
   /(^|\.)bfllvip\.com$/i,
   /(^|\.)dytt-kan\.com$/i,
   /(^|\.)ffzy-play\d+\.com$/i,
+  /(^|\.)lziapi\.com$/i,
+  /(^|\.)ffzyapi\.com$/i,
+  /(^|\.)suoniapi\.com$/i,
+  /(^|\.)guangsuapi\.com$/i,
+  /(^|\.)hongniuzy2\.com$/i,
+  /(^|\.)jinyingzy\.com$/i,
+  /(^|\.)kuaichezy\.org$/i,
+  /(^|\.)sdzyapi\.com$/i,
+  /(^|\.)123pan\.com$/i,
+  /(^|\.)huya\.com$/i,
+  /(^|\.)douyucdn\.cn$/i,
+  /(^|\.)aliyuncs\.com$/i,
 ];
 
 /**
