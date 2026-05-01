@@ -25,7 +25,9 @@ import { SearchResult } from '@/lib/types';
 import {
   getVideoResolutionFromM3u8,
   getVideoUrlCandidates,
+  mapWithConcurrency,
   processVideoUrl,
+  VIDEO_SPEED_TEST_CONCURRENCY,
 } from '@/lib/utils';
 
 import EpisodeSelector from '@/components/EpisodeSelector';
@@ -214,16 +216,18 @@ function PlayPageClient() {
   ): Promise<SearchResult> => {
     if (sources.length === 1) return sources[0];
 
-    // 全部并发测速，4s 内谁响应算谁，不再串行分批
-    const settled = await Promise.allSettled(
-      sources.map(async (source) => {
+    // 限制并发测速，避免播放源过多时互相抢带宽导致结果失真
+    const settled = await mapWithConcurrency(
+      sources,
+      VIDEO_SPEED_TEST_CONCURRENCY,
+      async (source) => {
         if (!source.episodes || source.episodes.length === 0) {
           throw new Error('no episodes');
         }
         const episodeUrl = source.episodes[0];
         const testResult = await getVideoResolutionFromM3u8(episodeUrl);
         return { source, testResult };
-      })
+      }
     );
 
     const allResults = settled.map((r) =>

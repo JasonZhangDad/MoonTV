@@ -8,8 +8,13 @@ import React, {
 } from 'react';
 
 import { SearchResult } from '@/lib/types';
+import {
+  getVideoResolutionFromM3u8,
+  mapWithConcurrency,
+  VIDEO_SPEED_TEST_CONCURRENCY,
+} from '@/lib/utils';
+
 import { ProxyImage } from '@/components/ProxyImage';
-import { getVideoResolutionFromM3u8 } from '@/lib/utils';
 
 // 定义视频信息类型
 interface VideoInfo {
@@ -202,12 +207,11 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
 
       if (pendingSources.length === 0) return;
 
-      const batchSize = Math.ceil(pendingSources.length / 2);
-
-      for (let start = 0; start < pendingSources.length; start += batchSize) {
-        const batch = pendingSources.slice(start, start + batchSize);
-        await Promise.all(batch.map(getVideoInfo));
-      }
+      await mapWithConcurrency(
+        pendingSources,
+        VIDEO_SPEED_TEST_CONCURRENCY,
+        getVideoInfo
+      );
     };
 
     fetchVideoInfosInBatches();
