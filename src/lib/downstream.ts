@@ -27,7 +27,7 @@ export async function searchFromApi(
 
     // 添加超时处理
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
 
     const response = await fetch(apiUrl, {
       headers: API_CONFIG.search.headers,

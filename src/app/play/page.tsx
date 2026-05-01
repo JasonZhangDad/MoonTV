@@ -1424,21 +1424,24 @@ function PlayPageClient() {
               enableWorker: true,
               lowLatencyMode: false, // VOD 流，LL-HLS 反而会导致卡顿
 
-              /* 缓冲/内存相关 */
-              maxBufferLength: 60,              // 前向缓冲 60s，代理延迟高时更流畅
-              backBufferLength: 30,
-              maxBufferSize: 100 * 1000 * 1000, // 100MB
+              /* 极速缓冲预加载策略 */
+              maxBufferLength: 120,              // 大幅提升预先缓冲（从60s提升至120s）
+              maxMaxBufferLength: 600,           // 允许最大缓冲到600s
+              backBufferLength: 30,              // 后退缓冲保留30s
+              maxBufferSize: 200 * 1000 * 1000,  // 缓冲内存提升至200MB
+              highBufferWatchdogPeriod: 2,       // 提高缓冲监控频率
 
               /* 质量选择：偏向高画质 */
               startLevel: -1,           // 自动选择初始质量级别
               capLevelToPlayerSize: false, // 不因播放器尺寸限制画质
-              abrEwmaDefaultEstimate: 5 * 1024 * 1024, // 初始带宽估算 5Mbps，促使选高质量轨道
+              abrEwmaDefaultEstimate: 10 * 1024 * 1024, // 初始带宽估算提升至 10Mbps，加快极清轨道的加载
 
-              /* 重试策略 */
-              fragLoadingMaxRetry: 6,
-              fragLoadingRetryDelay: 1000,
+              /* 更加积极的重试与超时策略 */
+              fragLoadingMaxRetry: 8,
+              fragLoadingRetryDelay: 500,        // 缩短重试间隔，尽快重连
               levelLoadingMaxRetry: 4,
-              manifestLoadingMaxRetry: 3,
+              manifestLoadingMaxRetry: 4,
+              fragLoadingTimeOut: 20000,         // 分片加载超时允许更长，以适应较慢的源
 
               /* 自定义loader */
               loader: CustomHlsJsLoader,
