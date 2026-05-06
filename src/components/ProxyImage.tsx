@@ -33,6 +33,7 @@ export const ProxyImage: React.FC<ProxyImageProps> = ({
       src={currentSrc}
       alt={alt}
       {...props}
+      referrerPolicy='no-referrer'
       onError={(event) => {
         if (candidateIndex + 1 < candidates.length) {
           setCandidateIndex((value) =>
