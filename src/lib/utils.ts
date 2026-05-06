@@ -22,13 +22,28 @@ export function processImageUrl(originalUrl: string): string {
 }
 
 /**
- * 获取图片加载候选地址，始终只使用原始直连地址。
+ * 获取图片加载候选地址，按优先级返回。
+ * 针对豆瓣图片使用 Caddy 反向代理以解决防盗链和 CORS 问题。
  */
 export function getImageProxyCandidates(originalUrl: string): string[] {
   if (!originalUrl) return [];
 
   const sourceUrl = extractOriginalUrl(originalUrl);
-  return [sourceUrl];
+  const candidates = new Set<string>();
+
+  // 针对豆瓣域名自动使用 Caddy 反代
+  if (sourceUrl.includes('doubanio.com')) {
+    try {
+      const urlObj = new URL(sourceUrl);
+      candidates.add(`/douban-img${urlObj.pathname}`);
+    } catch {
+      // 忽略无效 URL
+    }
+  }
+
+  candidates.add(sourceUrl);
+
+  return Array.from(candidates);
 }
 
 function extractOriginalUrl(url: string): string {
