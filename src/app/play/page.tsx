@@ -24,7 +24,6 @@ import {
 import { SearchResult } from '@/lib/types';
 import {
   getVideoResolutionFromM3u8,
-  getVideoUrlCandidates,
   mapWithConcurrency,
   processVideoUrl,
   VIDEO_SPEED_TEST_CONCURRENCY,
@@ -163,6 +162,9 @@ function PlayPageClient() {
 
   // 换源相关状态
   const [availableSources, setAvailableSources] = useState<SearchResult[]>([]);
+  const availableSourcesRef = useRef<SearchResult[]>(availableSources);
+  const failedPlaybackSourcesRef = useRef<Set<string>>(new Set());
+  const switchingSourceAfterErrorRef = useRef(false);
   const [sourceSearchLoading, setSourceSearchLoading] = useState(false);
   const [sourceSearchError, setSourceSearchError] = useState<string | null>(
     null
@@ -205,6 +207,11 @@ function PlayPageClient() {
   const artPlayerRef = useRef<any>(null);
   const artRef = useRef<HTMLDivElement | null>(null);
   const prefetchedEpisodesRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    availableSourcesRef.current = availableSources;
+    failedPlaybackSourcesRef.current.clear();
+  }, [availableSources]);
 
   // -----------------------------------------------------------------------------
   // 工具函数（Utils）
@@ -416,7 +423,7 @@ function PlayPageClient() {
   const ensureVideoSource = (video: HTMLVideoElement | null, url: string) => {
     if (!video || !url) return;
     const sources = Array.from(video.getElementsByTagName('source'));
-    // HLS 由 hls.js 接管；保留 source 会让浏览器绕过自定义 loader 直连分片。
+    // HLS 由 hls.js 接管，避免 ArtPlayer 额外保留重复 source。
     sources.forEach((s) => s.remove());
 
     // 始终允许远程播放（AirPlay / Cast）
@@ -555,6 +562,55 @@ function PlayPageClient() {
     }
   }
 
+  async function switchToNextSourceAfterPlaybackError(reason: string) {
+    if (switchingSourceAfterErrorRef.current) return;
+
+    const currentSourceKey = `${currentSourceRef.current}-${currentIdRef.current}`;
+    failedPlaybackSourcesRef.current.add(currentSourceKey);
+
+    const sources = availableSourcesRef.current;
+    if (sources.length <= 1) {
+      console.error('播放源不可用，且没有其他可切换源:', reason);
+      setError('当前播放源不可用，请手动切换其他播放源');
+      return;
+    }
+
+    const currentIndex = sources.findIndex(
+      (source) =>
+        source.source === currentSourceRef.current &&
+        source.id === currentIdRef.current
+    );
+    const startIndex = currentIndex >= 0 ? currentIndex + 1 : 0;
+    const targetEpisodeIndex = currentEpisodeIndexRef.current;
+
+    for (let offset = 0; offset < sources.length; offset += 1) {
+      const source = sources[(startIndex + offset) % sources.length];
+      const sourceKey = `${source.source}-${source.id}`;
+
+      if (
+        sourceKey === currentSourceKey ||
+        failedPlaybackSourcesRef.current.has(sourceKey) ||
+        !source.episodes?.[targetEpisodeIndex]
+      ) {
+        continue;
+      }
+
+      switchingSourceAfterErrorRef.current = true;
+      try {
+        const currentTime = artPlayerRef.current?.currentTime || 0;
+        resumeTimeRef.current = currentTime > 1 ? currentTime : null;
+        console.warn(`播放源失败，自动切换到: ${source.source_name || source.source}`);
+        await handleSourceChange(source.source, source.id, source.title);
+      } finally {
+        switchingSourceAfterErrorRef.current = false;
+      }
+      return;
+    }
+
+    console.error('所有候选播放源都不可用:', reason);
+    setError('当前播放源不可用，且没有其他可自动切换的播放源');
+  }
+
   // 跳过片头片尾配置相关函数
   const handleSkipConfigChange = async (newConfig: {
     enable: boolean;
@@ -662,11 +718,7 @@ function PlayPageClient() {
       super(config);
       const load = this.load.bind(this);
       this.load = function (context: any, config: any, callbacks: any) {
-        const originalUrl = context.url;
         context.url = resolveHlsRequestUrl(context.url);
-        const fallbackUrls = getVideoUrlCandidates(originalUrl)
-          .map((url) => resolveHlsRequestUrl(url))
-          .filter((url, index, urls) => url !== context.url && urls.indexOf(url) === index);
         const onError = callbacks.onError;
         callbacks.onError = function (
           error: any,
@@ -674,13 +726,6 @@ function PlayPageClient() {
           networkDetails: any,
           stats: any
         ) {
-          const fallbackUrl = fallbackUrls.shift();
-          if (fallbackUrl) {
-            context.url = fallbackUrl;
-            load(context, config, callbacks);
-            return;
-          }
-
           if (onError) {
             return onError(error, context, networkDetails, stats);
           }
@@ -1472,6 +1517,9 @@ function PlayPageClient() {
                   } else {
                     console.error('网络错误超过重试上限，放弃');
                     hls.destroy();
+                    switchToNextSourceAfterPlaybackError(
+                      data?.details || 'network error'
+                    );
                   }
                   break;
                 case Hls.ErrorTypes.MEDIA_ERROR:
@@ -1481,6 +1529,9 @@ function PlayPageClient() {
                 default:
                   console.error('无法恢复的错误', data);
                   hls.destroy();
+                  switchToNextSourceAfterPlaybackError(
+                    data?.details || 'fatal hls error'
+                  );
                   break;
               }
             });

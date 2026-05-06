@@ -13,9 +13,9 @@ import {
   subscribeToDataUpdates,
 } from '@/lib/db.client';
 import { SearchResult } from '@/lib/types';
-import { ProxyImage } from '@/components/ProxyImage';
 
 import { ImagePlaceholder } from '@/components/ImagePlaceholder';
+import { ProxyImage } from '@/components/ProxyImage';
 
 interface VideoCardProps {
   id?: string;

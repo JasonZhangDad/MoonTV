@@ -9,7 +9,11 @@ type ProxyImageProps = Omit<ImageProps, 'src'> & {
   src: string;
 };
 
-export const ProxyImage: React.FC<ProxyImageProps> = ({ src, ...props }) => {
+export const ProxyImage: React.FC<ProxyImageProps> = ({
+  src,
+  alt,
+  ...props
+}) => {
   const candidates = getImageProxyCandidates(src);
   const [candidateIndex, setCandidateIndex] = useState(0);
 
@@ -18,18 +22,22 @@ export const ProxyImage: React.FC<ProxyImageProps> = ({ src, ...props }) => {
   }, [src]);
 
   if (!candidates.length) {
-    return <Image src={src} {...props} />;
+    return <Image src={src} alt={alt} {...props} />;
   }
 
-  const currentSrc = candidates[Math.min(candidateIndex, candidates.length - 1)];
+  const currentSrc =
+    candidates[Math.min(candidateIndex, candidates.length - 1)];
 
   return (
     <Image
       src={currentSrc}
+      alt={alt}
       {...props}
       onError={(event) => {
         if (candidateIndex + 1 < candidates.length) {
-          setCandidateIndex((value) => Math.min(value + 1, candidates.length - 1));
+          setCandidateIndex((value) =>
+            Math.min(value + 1, candidates.length - 1)
+          );
           return;
         }
 

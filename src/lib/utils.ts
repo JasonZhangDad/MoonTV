@@ -1,98 +1,43 @@
 /* eslint-disable @typescript-eslint/no-explicit-any,no-console */
 
-const DEFAULT_VIDEO_PROXY = 'https://play.magies.top/?url=';
-const DEFAULT_IMAGE_PROXY = 'https://img.magies.top/?url=';
-const IMAGE_PROXY_FALLBACK = '/api/image-proxy?url=';
 export const VIDEO_SPEED_TEST_CONCURRENCY = 4;
 const PLAYLIST_TEST_TIMEOUT_MS = 3000;
 const VARIANT_PLAYLIST_TIMEOUT_MS = 2500;
 const SEGMENT_SPEED_TEST_TIMEOUT_MS = 2500;
 const SEGMENT_SPEED_TEST_MAX_BYTES = 1024 * 1024;
 const MIN_SEGMENT_SPEED_TEST_BYTES = 32 * 1024;
-const VIDEO_PROXY_BYPASS_HOST_PATTERNS = [
-  /(^|\.)bfllvip\.com$/i,
-  /(^|\.)dytt-kan\.com$/i,
-  /(^|\.)ffzy-play\d+\.com$/i,
-  /(^|\.)lziapi\.com$/i,
-  /(^|\.)ffzyapi\.com$/i,
-  /(^|\.)suoniapi\.com$/i,
-  /(^|\.)guangsuapi\.com$/i,
-  /(^|\.)hongniuzy2\.com$/i,
-  /(^|\.)jinyingzy\.com$/i,
-  /(^|\.)kuaichezy\.org$/i,
-  /(^|\.)sdzyapi\.com$/i,
-  /(^|\.)123pan\.com$/i,
-  /(^|\.)huya\.com$/i,
-  /(^|\.)douyucdn\.cn$/i,
-  /(^|\.)aliyuncs\.com$/i,
-];
 
 /**
- * 获取图片代理 URL 设置
+ * 图片代理已停用。
  */
 export function getImageProxyUrl(): string | null {
-  if (typeof window === 'undefined') return null;
-
-  const localImageProxy = localStorage.getItem('imageProxyUrl');
-  if (localImageProxy != null) {
-    return localImageProxy.trim()
-      ? normalizeProxyPrefix(localImageProxy.trim())
-      : DEFAULT_IMAGE_PROXY;
-  }
-
-  // 如果未设置，则使用全局对象
-  const serverImageProxy = (window as any).RUNTIME_CONFIG?.IMAGE_PROXY;
-  return serverImageProxy && serverImageProxy.trim()
-    ? normalizeProxyPrefix(serverImageProxy.trim())
-    : DEFAULT_IMAGE_PROXY;
+  return null;
 }
 
 /**
- * 处理图片 URL，如果设置了图片代理则使用代理
+ * 处理图片 URL，始终返回原始直连地址。
  */
 export function processImageUrl(originalUrl: string): string {
-  if (!originalUrl) return originalUrl;
-
-  const proxyUrl = getImageProxyUrl();
-  if (!proxyUrl) return originalUrl;
-  if (originalUrl.startsWith(proxyUrl)) return originalUrl;
-
-  return `${proxyUrl}${encodeURIComponent(originalUrl)}`;
+  return originalUrl ? extractOriginalUrl(originalUrl) : originalUrl;
 }
 
 /**
- * 获取图片代理候选地址，按优先级返回。
+ * 获取图片加载候选地址，始终只使用原始直连地址。
  */
 export function getImageProxyCandidates(originalUrl: string): string[] {
   if (!originalUrl) return [];
 
   const sourceUrl = extractOriginalUrl(originalUrl);
-  const proxyUrl = getImageProxyUrl();
-  const candidates = new Set<string>();
-
-  if (proxyUrl) {
-    candidates.add(`${proxyUrl}${encodeURIComponent(sourceUrl)}`);
-  }
-
-  candidates.add(`${IMAGE_PROXY_FALLBACK}${encodeURIComponent(sourceUrl)}`);
-  candidates.add(sourceUrl);
-
-  return Array.from(candidates);
-}
-
-function normalizeProxyPrefix(proxyUrl: string): string {
-  if (!proxyUrl) return proxyUrl;
-  if (proxyUrl.includes('?url=')) return proxyUrl;
-  if (proxyUrl.endsWith('?url=')) return proxyUrl;
-
-  return `${proxyUrl.replace(/[/?&]+$/, '')}/?url=`;
+  return [sourceUrl];
 }
 
 function extractOriginalUrl(url: string): string {
   try {
     const parsed = new URL(
       url,
-      typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
+      typeof window !== 'undefined'
+        ? window.location.origin
+        : 'http://localhost'
     );
     const proxiedUrl = parsed.searchParams.get('url');
     return proxiedUrl ? decodeURIComponent(proxiedUrl) : url;
@@ -140,43 +85,20 @@ export function processDoubanUrl(originalUrl: string): string {
 }
 
 /**
- * 获取视频播放 URL 候选，优先直连，失败时再回退到播放代理。
+ * 获取视频播放 URL 候选。播放链路始终直连，不回退播放代理。
  */
 export function getVideoUrlCandidates(originalUrl: string): string[] {
   if (!originalUrl) return [];
 
   const sourceUrl = extractOriginalUrl(originalUrl);
-  const candidates = new Set<string>();
-
-  candidates.add(sourceUrl);
-  if (!shouldBypassVideoProxy(sourceUrl)) {
-    candidates.add(getProxiedVideoUrl(sourceUrl));
-  }
-
-  return Array.from(candidates);
+  return [sourceUrl];
 }
 
 /**
- * 处理视频播放 URL，默认优先直连，由 HLS loader 负责失败回退。
+ * 处理视频播放 URL，始终返回原始直连地址。
  */
 export function processVideoUrl(originalUrl: string): string {
   return getVideoUrlCandidates(originalUrl)[0] || originalUrl;
-}
-
-function getProxiedVideoUrl(originalUrl: string): string {
-  if (originalUrl.startsWith(DEFAULT_VIDEO_PROXY)) return originalUrl;
-  return `${DEFAULT_VIDEO_PROXY}${encodeURIComponent(originalUrl)}`;
-}
-
-function shouldBypassVideoProxy(originalUrl: string): boolean {
-  try {
-    const { hostname } = new URL(originalUrl);
-    return VIDEO_PROXY_BYPASS_HOST_PATTERNS.some((pattern) =>
-      pattern.test(hostname)
-    );
-  } catch {
-    return false;
-  }
 }
 
 export function cleanHtmlTags(text: string): string {
@@ -303,10 +225,7 @@ function findFirstSegmentUrl(text: string, baseUrl: string): string | null {
 
     if (line.startsWith('#')) continue;
 
-    if (
-      expectSegment ||
-      /\.(ts|m4s|mp4|m4v|aac|mp3)(\?|#|$)/i.test(line)
-    ) {
+    if (expectSegment || /\.(ts|m4s|mp4|m4v|aac|mp3)(\?|#|$)/i.test(line)) {
       return resolvePlaylistUrl(line, baseUrl);
     }
   }
@@ -435,7 +354,10 @@ export async function getVideoResolutionFromM3u8(m3u8Url: string): Promise<{
 }> {
   for (const url of getVideoUrlCandidates(m3u8Url)) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), PLAYLIST_TEST_TIMEOUT_MS);
+    const timer = setTimeout(
+      () => controller.abort(),
+      PLAYLIST_TEST_TIMEOUT_MS
+    );
     const start = performance.now();
 
     try {
